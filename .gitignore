@@ -1,0 +1,14 @@
+
+/mobile/assets/.env
+
+# Environment variables and secrets
+**/.env
+**/.env.*
+!**/.env.example
+**/secrets.dart
+**/secrets.json
+
+# IDE and build artifacts
+.idea/
+**/build/
+

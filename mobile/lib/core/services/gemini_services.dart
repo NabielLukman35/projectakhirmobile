@@ -1,22 +1,17 @@
+
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 class GeminiService {
-  // Kunci API valid dan aktif (Google Generative Language)
-  static const String _defaultApiKey = 'your_gemini_api_key_here';
-
+  // API key diambil dari file .env lokal
   static String get apiKey {
-    final envKey = dotenv.env['GEMINI_API_KEY'];
-    if (envKey != null && envKey.trim().isNotEmpty && envKey != 'your_gemini_api_key_here') {
-      return envKey.trim();
-    }
-    return _defaultApiKey;
+    return dotenv.env['GEMINI_API_KEY']?.trim() ?? '';
   }
 
   /// FR-09: Mendapatkan konsultasi agronomi pintar dari Google Gemini AI
-  /// Dilengkapi model tercepat (gemini-3.5-flash-lite) & Smart Agronomy Engine Fallback instan
+  /// Dilengkapi model tercepat & Smart Agronomy Engine Fallback
   static Future<String> getTaniAdvice(
     String userPrompt, {
     List<int>? imageBytes,
@@ -24,35 +19,34 @@ class GeminiService {
   }) async {
     final key = apiKey;
 
-    // Prioritaskan model tercepat & paling stabil (3.5-flash-lite respons < 2 detik)
     final candidateModels = [
       'gemini-3.5-flash-lite',
       'gemini-3.5-flash',
     ];
 
-    for (final model in candidateModels) {
-      try {
-        final result = await _callGeminiRestApi(
-          apiKey: key,
-          prompt: userPrompt,
-          model: model,
-          imageBytes: imageBytes,
-          mimeType: mimeType,
-        );
-        if (result != null && result.trim().isNotEmpty) {
-          return result;
+    if (key.isNotEmpty) {
+      for (final model in candidateModels) {
+        try {
+          final result = await _callGeminiRestApi(
+            apiKey: key,
+            prompt: userPrompt,
+            model: model,
+            imageBytes: imageBytes,
+            mimeType: mimeType,
+          );
+          if (result != null && result.trim().isNotEmpty) {
+            return result;
+          }
+        } catch (e) {
+          debugPrint('[GeminiService] Model $model error: $e');
         }
-      } catch (e) {
-        debugPrint('[GeminiService] Model $model error: $e');
       }
     }
 
-    // Smart Agronomy Engine Fallback (Jaminan 100% Selalu Menjawab Ilmiah & Relevan seketika)
     return _generateSmartAgronomyAdvice(userPrompt);
   }
 
-  /// FR-09: Rekomendasi Agronomi Spesifik per-Greenhouse dari Google Gemini AI
-  /// Menghasilkan panduan presisi berbasis 3 input: Jenis Tanaman, Varietas, dan Media Tanam / Tanah
+  /// FR-09: Rekomendasi Agronomi Spesifik per-Greenhouse
   static Future<String> getGreenhouseAgronomyAdvice({
     required String plantType,
     required String plantVariety,
@@ -78,25 +72,37 @@ class GeminiService {
       'gemini-3.5-flash',
     ];
 
-    for (final model in candidateModels) {
-      try {
-        final result = await _callGeminiRestApi(
-          apiKey: key,
-          prompt: prompt,
-          model: model,
-        );
-        if (result != null && result.trim().isNotEmpty) {
-          return result.trim();
+    if (key.isNotEmpty) {
+      for (final model in candidateModels) {
+        try {
+          final result = await _callGeminiRestApi(
+            apiKey: key,
+            prompt: prompt,
+            model: model,
+          );
+          if (result != null && result.trim().isNotEmpty) {
+            return result.trim();
+          }
+        } catch (e) {
+          debugPrint('[GeminiService] Greenhouse agronomy error ($model): $e');
         }
-      } catch (e) {
-        debugPrint('[GeminiService] Greenhouse agronomy error ($model): $e');
       }
     }
 
-    return _generateGreenhouseFallbackAdvice(plantType, plantVariety, soilType, hst);
+    return _generateGreenhouseFallbackAdvice(
+      plantType,
+      plantVariety,
+      soilType,
+      hst,
+    );
   }
 
-  static String _generateGreenhouseFallbackAdvice(String plant, String variety, String soil, int? hst) {
+  static String _generateGreenhouseFallbackAdvice(
+    String plant,
+    String variety,
+    String soil,
+    int? hst,
+  ) {
     return '1. 💧 **Manajemen Irigasi & Kelembapan Media ($soil):**\n'
         'Jaga kelembapan media tanam berkala pada rentang 65-75%. Pada $soil, lakukan penyiraman tetes terkontrol 3-4 kali sehari saat pagi dan sore untuk mencegah genangan air dan stres perakaran.\n\n'
         '2. 🧪 **Nutrisi & Parameter pH/EC Khusus ($plant - $variety):**\n'
@@ -105,13 +111,7 @@ class GeminiService {
         'Pasang yellow sticky trap setinggi tajuk tanaman untuk mendeteksi dini serangan kutu kebul atau thrips. Pastikan ventilasi udara lancar untuk menekan risiko infeksi jamur daun.';
   }
 
-  /// FR-07 & FR-11: Membuat Otomatisasi Jadwal Perawatan 7 Hari (1 Minggu) ke Depan Berbasis Gemini AI
-  /// Memanfaatkan parameter budidaya:
-  /// - jenis tanaman (plantType)
-  /// - varietas tanaman (plantVariety)
-  /// - jenis tanah / media tanam (soilType)
-  /// - umur tanaman / HST
-  /// - data sensor IoT terkini (suhu, kelembapan udara, intensitas cahaya) jika tersambung
+  /// FR-07 & FR-11: Membuat otomatisasi jadwal perawatan 7 hari
   static Future<List<Map<String, dynamic>>> generateWeeklyScheduleWithAi({
     required String plantType,
     required String plantVariety,
@@ -121,17 +121,23 @@ class GeminiService {
     String? greenhouseName,
   }) async {
     final hstText = hst != null ? '- Umur Tanaman: Hari ke-$hst (HST)\n' : '';
-    
-    final bool hasIot = iotData != null && (iotData['suhu'] != null || iotData['kelembapan'] != null || iotData['cahaya'] != null);
+
+    final bool hasIot = iotData != null &&
+        (iotData['suhu'] != null ||
+            iotData['kelembapan'] != null ||
+            iotData['cahaya'] != null);
+
     String iotContext = '';
     if (hasIot) {
       final suhu = iotData['suhu']?.toStringAsFixed(1) ?? '-';
       final kelembapan = iotData['kelembapan']?.toStringAsFixed(1) ?? '-';
       final cahaya = iotData['cahaya']?.toStringAsFixed(0) ?? '-';
-      iotContext = '- Data Sensor IoT Terkini: Suhu $suhu°C, Kelembapan Udara $kelembapan%, Intensitas Cahaya $cahaya lx.\n'
+      iotContext =
+          '- Data Sensor IoT Terkini: Suhu $suhu°C, Kelembapan Udara $kelembapan%, Intensitas Cahaya $cahaya lx.\n'
           '(Wajib perhitungkan data sensor ini: jika suhu tinggi sesuaikan penyiraman dan nutrisi; jika lembap waspada jamur/fungi)';
     } else {
-      iotContext = '- Sensor IoT: Belum terhubung (Gunakan standar parameter agronomi greenhouse ideal)';
+      iotContext =
+          '- Sensor IoT: Belum terhubung (Gunakan standar parameter agronomi greenhouse ideal)';
     }
 
     final prompt = 'Kamu adalah Ahli Agronomi Presisi dan AI Smart Greenhouse TaniGreen.\n'
@@ -160,22 +166,24 @@ class GeminiService {
       'gemini-3.5-flash',
     ];
 
-    for (final model in candidateModels) {
-      try {
-        final rawResponse = await _callGeminiJsonApi(
-          apiKey: key,
-          prompt: prompt,
-          model: model,
-        );
+    if (key.isNotEmpty) {
+      for (final model in candidateModels) {
+        try {
+          final rawResponse = await _callGeminiJsonApi(
+            apiKey: key,
+            prompt: prompt,
+            model: model,
+          );
 
-        if (rawResponse != null && rawResponse.trim().isNotEmpty) {
-          final parsed = _parseWeeklyScheduleJson(rawResponse);
-          if (parsed.isNotEmpty) {
-            return parsed;
+          if (rawResponse != null && rawResponse.trim().isNotEmpty) {
+            final parsed = _parseWeeklyScheduleJson(rawResponse);
+            if (parsed.isNotEmpty) {
+              return parsed;
+            }
           }
+        } catch (e) {
+          debugPrint('[GeminiService] Schedule generation error ($model): $e');
         }
-      } catch (e) {
-        debugPrint('[GeminiService] Schedule generation error ($model): $e');
       }
     }
 
@@ -194,7 +202,9 @@ class GeminiService {
     required String prompt,
     required String model,
   }) async {
-    final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey');
+    final url = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
+    );
 
     final body = jsonEncode({
       'contents': [
@@ -252,7 +262,9 @@ class GeminiService {
 
       final firstBracket = clean.indexOf('[');
       final lastBracket = clean.lastIndexOf(']');
-      if (firstBracket != -1 && lastBracket != -1 && lastBracket > firstBracket) {
+      if (firstBracket != -1 &&
+          lastBracket != -1 &&
+          lastBracket > firstBracket) {
         clean = clean.substring(firstBracket, lastBracket + 1);
       }
 
@@ -302,7 +314,8 @@ class GeminiService {
     Map<String, double>? iotData,
     String? greenhouseName,
   }) {
-    final bool hasIot = iotData != null && (iotData['suhu'] != null || iotData['kelembapan'] != null);
+    final bool hasIot = iotData != null &&
+        (iotData['suhu'] != null || iotData['kelembapan'] != null);
     final double suhu = iotData?['suhu'] ?? 28.0;
     final double kelembapan = iotData?['kelembapan'] ?? 65.0;
 
@@ -310,12 +323,15 @@ class GeminiService {
     String iotFungusNote = '';
     if (hasIot) {
       if (suhu >= 31.0) {
-        iotWaterNote = ' (Sensor suhu ${suhu.toStringAsFixed(1)}°C tergolong panas: tingkatkan durasi tetes 15%)';
+        iotWaterNote =
+            ' (Sensor suhu ${suhu.toStringAsFixed(1)}°C tergolong panas: tingkatkan durasi tetes 15%)';
       } else {
-        iotWaterNote = ' (Suhu ${suhu.toStringAsFixed(1)}°C: laju transpirasi normal)';
+        iotWaterNote =
+            ' (Suhu ${suhu.toStringAsFixed(1)}°C: laju transpirasi normal)';
       }
       if (kelembapan >= 75.0) {
-        iotFungusNote = ' (Kelembapan ${kelembapan.toStringAsFixed(1)}% tinggi: maksimalkan sirkulasi udara & waspada embun jelaga)';
+        iotFungusNote =
+            ' (Kelembapan ${kelembapan.toStringAsFixed(1)}% tinggi: maksimalkan sirkulasi udara & waspada embun jelaga)';
       }
     }
 
@@ -326,7 +342,8 @@ class GeminiService {
         'kategori': 'Penyiraman',
         'prioritas': 'Prioritas',
         'jam': '07:30',
-        'catatan': 'Siram larutan nutrisi dengan EC 1.8-2.2 mS/cm sesuai kapasitas serap $soilType.$iotWaterNote',
+        'catatan':
+            'Siram larutan nutrisi dengan EC 1.8-2.2 mS/cm sesuai kapasitas serap $soilType.$iotWaterNote',
       },
       {
         'hari': 2,
@@ -334,7 +351,8 @@ class GeminiService {
         'kategori': 'Proteksi Hama',
         'prioritas': 'Terjadwal',
         'jam': '08:00',
-        'catatan': 'Periksa koloni thrips atau kutu kebul di bawah daun $plantVariety. Bersihkan perangkap serangga.',
+        'catatan':
+            'Periksa koloni thrips atau kutu kebul di bawah daun $plantVariety. Bersihkan perangkap serangga.',
       },
       {
         'hari': 3,
@@ -342,7 +360,8 @@ class GeminiService {
         'kategori': 'Pemupukan',
         'prioritas': 'Prioritas',
         'jam': '07:00',
-        'catatan': 'Semprot pupuk kalsium larut air untuk memperkuat struktur dinding sel $plantVariety.',
+        'catatan':
+            'Semprot pupuk kalsium larut air untuk memperkuat struktur dinding sel $plantVariety.',
       },
       {
         'hari': 4,
@@ -350,7 +369,8 @@ class GeminiService {
         'kategori': 'Perawatan',
         'prioritas': 'Terjadwal',
         'jam': '09:00',
-        'catatan': 'Pastikan perakaran pada media $soilType mendapatkan suplai oksigen yang cukup dan tidak becek.',
+        'catatan':
+            'Pastikan perakaran pada media $soilType mendapatkan suplai oksigen yang cukup dan tidak becek.',
       },
       {
         'hari': 5,
@@ -358,7 +378,8 @@ class GeminiService {
         'kategori': 'Perawatan',
         'prioritas': 'Mendatang',
         'jam': '08:30',
-        'catatan': 'Potong cabang air aksilar $plantType agar asimilasi fotosintesis terkonsentrasi ke buah/bunga.',
+        'catatan':
+            'Potong cabang air aksilar $plantType agar asimilasi fotosintesis terkonsentrasi ke buah/bunga.',
       },
       {
         'hari': 6,
@@ -366,7 +387,8 @@ class GeminiService {
         'kategori': 'Proteksi Hama',
         'prioritas': 'Terjadwal',
         'jam': '16:30',
-        'catatan': 'Semprotkan ekstrak mimba/belerang halus saat sore hari untuk mencegah jamur daun.$iotFungusNote',
+        'catatan':
+            'Semprotkan ekstrak mimba/belerang halus saat sore hari untuk mencegah jamur daun.$iotFungusNote',
       },
       {
         'hari': 7,
@@ -374,12 +396,13 @@ class GeminiService {
         'kategori': 'Perawatan',
         'prioritas': 'Mendatang',
         'jam': '08:00',
-        'catatan': 'Catat perkembangan vigor batang, jumlah helai daun, dan pertambahan tinggi varietas $plantVariety.',
+        'catatan':
+            'Catat perkembangan vigor batang, jumlah helai daun, dan pertambahan tinggi varietas $plantVariety.',
       },
     ];
   }
 
-  /// Memanggil REST API Generative Language Google dengan Adaptive Auth Header
+  /// Memanggil REST API Generative Language Google
   static Future<String?> _callGeminiRestApi({
     required String apiKey,
     required String prompt,
@@ -387,7 +410,9 @@ class GeminiService {
     List<int>? imageBytes,
     String? mimeType,
   }) async {
-    final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey');
+    final url = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
+    );
 
     final List<Map<String, dynamic>> parts = [
       {
@@ -436,9 +461,9 @@ class GeminiService {
         final data = jsonDecode(response.body);
         final candidates = data['candidates'] as List?;
         if (candidates != null && candidates.isNotEmpty) {
-          final parts = candidates[0]['content']?['parts'] as List?;
-          if (parts != null && parts.isNotEmpty) {
-            return parts[0]['text'] as String?;
+          final responseParts = candidates[0]['content']?['parts'] as List?;
+          if (responseParts != null && responseParts.isNotEmpty) {
+            return responseParts[0]['text'] as String?;
           }
         }
       } else {
@@ -451,14 +476,15 @@ class GeminiService {
     return null;
   }
 
-  /// Basis Pengetahuan Agronomi Cerdas Bawaan Smart Tani (TaniGreen)
-  /// Menyediakan diagnosa komprehensif, dosis, dan langkah penanganan
+  /// Basis Pengetahuan Agronomi Cerdas Bawaan Smart Tani
   static String _generateSmartAgronomyAdvice(String prompt) {
     final lower = prompt.toLowerCase();
 
     // 1. Diagnosis Melon
     if (lower.contains('melon')) {
-      if (lower.contains('kuning') || lower.contains('bercak') || lower.contains('daun')) {
+      if (lower.contains('kuning') ||
+          lower.contains('bercak') ||
+          lower.contains('daun')) {
         return '🍈 **Diagnosis Agronomi Melon (Bercak Kuning / Daun Menguning):**\n\n'
             'Gejala bercak kuning pada daun melon umumnya mengindikasikan 2 kemungkinan utama:\n'
             '1. **Embun Bulu (*Downy Mildew* / *Pseudoperonospora cubensis*):** Bercak bersudut kuning kecokelatan di permukaan atas daun dan spora abu-abu keunguan di bawah daun.\n'
@@ -474,7 +500,11 @@ class GeminiService {
     }
 
     // 2. Diagnosis Hama Kutu Kebul / Thrips / Tungau
-    if (lower.contains('kutu') || lower.contains('kebul') || lower.contains('thrips') || lower.contains('hama') || lower.contains('keriting')) {
+    if (lower.contains('kutu') ||
+        lower.contains('kebul') ||
+        lower.contains('thrips') ||
+        lower.contains('hama') ||
+        lower.contains('keriting')) {
       return '🦟 **Penanganan Hama Kutu Kebul & Daun Keriting:**\n\n'
           'Kutu kebul (*Bemisia tabaci*) dan Thrips merupakan vektor utama penularan virus kuning (*Gemini Virus*) pada tanaman greenhouse.\n\n'
           '**Langkah Pengendalian Terpadu:**\n'
@@ -485,7 +515,11 @@ class GeminiService {
     }
 
     // 3. Nutrisi, Pupuk, NPK, dan AB Mix
-    if (lower.contains('pupuk') || lower.contains('ab mix') || lower.contains('npk') || lower.contains('dosis') || lower.contains('takaran')) {
+    if (lower.contains('pupuk') ||
+        lower.contains('ab mix') ||
+        lower.contains('npk') ||
+        lower.contains('dosis') ||
+        lower.contains('takaran')) {
       return '🌿 **Panduan Dosis & Pemupukan Presisi Smart Tani:**\n\n'
           '* **Fase Vegetatif (Hari 1 - 25 HST):**\n'
           '  Gunakan formulasi tinggi Nitrogen seperti NPK 16-16-16 atau AB Mix daun dengan konsentrasi 800 - 1.000 ppm (EC 1.6 - 2.0 mS/cm). Tujuannya mempercepat pembentukan tajuk daun dan perakaran kokoh.\n\n'
@@ -495,7 +529,10 @@ class GeminiService {
     }
 
     // 4. Parameter pH dan EC Air
-    if (lower.contains('ph') || lower.contains('ec') || lower.contains('asam') || lower.contains('alkali')) {
+    if (lower.contains('ph') ||
+        lower.contains('ec') ||
+        lower.contains('asam') ||
+        lower.contains('alkali')) {
       return '🧪 **Manajemen pH & EC Air Nutrisi Greenhouse:**\n\n'
           '* **Rentang pH Optimal Hortikultura:** **5.8 - 6.5**.\n'
           '* **Dampak Jika pH Terlalu Tinggi (> 7.0):** Terjadi pengendapan unsur mikro seperti Besi (Fe), Mangan (Mn), dan Seng (Zn), menyebabkan daun muda pucat/kuning (klorosis).\n'
@@ -507,7 +544,9 @@ class GeminiService {
     }
 
     // 5. Diagnosis Tomat & Cabai
-    if (lower.contains('tomat') || lower.contains('cabai') || lower.contains('cabe')) {
+    if (lower.contains('tomat') ||
+        lower.contains('cabai') ||
+        lower.contains('cabe')) {
       return '🍅 **Diagnosis & Perawatan Tomat / Cabai Greenhouse:**\n\n'
           '* **Gejala Ujung Buah Busuk Hitam (*Blossom End Rot*):** Disebabkan defisiensi Kalsium saat pembesaran buah atau fluktuasi pengairan yang tidak stabil. Solusi: Lakukan penyemprotan kalsium cair (*foliar spray*) pada daun dan jaga kelembaban media tanam konsisten 65-75%.\n\n'
           '* **Gejala Daun Menggulung ke Atas (*Leaf Curl*):** Bisa disebabkan oleh cuaca terlalu panas/terik atau serangan Thrips. Turunkan suhu greenhouse dengan ventilasi udara yang baik.\n\n'

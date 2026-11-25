@@ -1,15 +1,3 @@
 {
-  "dart.flutterSdkPath": "C:\\flutter",
-  "dart.projectSearchPaths": [
-    "mobile"
-  ],
-  "C_Cpp.errorSquiggles": "disabled",
-  "C_Cpp.intelliSenseEngine": "disabled",
-  "C_Cpp.default.includePath": [
-    "${workspaceFolder}/**",
-    "${workspaceFolder}/mobile/windows/**",
-    "${workspaceFolder}/iot/include",
-    "${workspaceFolder}/iot/lib/**",
-    "${workspaceFolder}/iot/.pio/libdeps/nodemcuv2/**"
-  ]
+  "dart.flutterSdkPath": "C:\\flutter"
 }

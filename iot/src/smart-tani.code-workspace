@@ -1,21 +1,12 @@
 {
 	"folders": [
 		{
-			"name": "Smart-Tani (Mobile)",
-			"path": "../../mobile"
+			"path": "../../../../Kuliah/Semester 5/Pemrograman Aplikasi Mobile/smart-tani"
 		},
 		{
-			"name": "Smart-Tani (IoT)",
+			"name": "smart-greenhouse",
 			"path": ".."
-		},
-		{
-			"name": "Smart-Tani (Backend)",
-			"path": "../../backend"
 		}
 	],
-	"settings": {
-		"dart.flutterSdkPath": "C:\\flutter",
-		"C_Cpp.errorSquiggles": "disabled",
-		"C_Cpp.intelliSenseEngine": "disabled"
-	}
+	"settings": {}
 }
