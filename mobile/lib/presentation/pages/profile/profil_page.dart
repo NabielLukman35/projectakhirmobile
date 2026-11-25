@@ -549,21 +549,27 @@ class _ProfilePageState extends State<ProfilePage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Row(
-                                  children: [
-                                    Icon(Icons.map_rounded,
-                                        color: AppTheme.neonLime, size: 20),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Peta Akumulasi Greenhouse',
-                                      style: TextStyle(
-                                        color: AppTheme.creamWhite,
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w800,
+                                const Expanded(
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.map_rounded,
+                                          color: AppTheme.neonLime, size: 20),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Peta Akumulasi Greenhouse',
+                                          style: TextStyle(
+                                            color: AppTheme.creamWhite,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
+                                const SizedBox(width: 6),
                                 TextButton.icon(
                                   onPressed: () {
                                     Navigator.push(
@@ -581,14 +587,15 @@ class _ProfilePageState extends State<ProfilePage> {
                                     'Layar Penuh',
                                     style: TextStyle(
                                       color: AppTheme.neonLime,
-                                      fontSize: 12,
+                                      fontSize: 11,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                   style: TextButton.styleFrom(
-                                    padding: EdgeInsets.zero,
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                     minimumSize: Size.zero,
                                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity: VisualDensity.compact,
                                   ),
                                 ),
                               ],
@@ -772,24 +779,33 @@ class _ProfilePageState extends State<ProfilePage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Row(
-                                  children: [
-                                    Icon(Icons.roofing_rounded,
-                                        color: AppTheme.neonLime, size: 20),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Daftar Greenhouse Saya',
-                                      style: TextStyle(
-                                        color: AppTheme.creamWhite,
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w800,
+                                const Expanded(
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.roofing_rounded,
+                                          color: AppTheme.neonLime, size: 20),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Daftar Greenhouse Saya',
+                                          style: TextStyle(
+                                            color: AppTheme.creamWhite,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
+                                const SizedBox(width: 6),
                                 Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     IconButton(
+                                      constraints: const BoxConstraints(),
+                                      padding: const EdgeInsets.all(4),
                                       icon: const Icon(Icons.refresh_rounded, size: 18, color: AppTheme.textGrey),
                                       tooltip: 'Segarkan data',
                                       visualDensity: VisualDensity.compact,
@@ -808,7 +824,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: AppTheme.neonLime,
                                         foregroundColor: AppTheme.darkForest,
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                         textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(8),
