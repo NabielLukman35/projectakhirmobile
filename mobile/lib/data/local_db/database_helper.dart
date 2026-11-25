@@ -384,6 +384,22 @@ class DatabaseHelper {
     return await db.delete('greenhouse', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<int> deleteGreenhouseByNameOrId({int? id, String? name}) async {
+    final db = await instance.database;
+    int count = 0;
+    if (id != null) {
+      count = await db.delete('greenhouse', where: 'id = ?', whereArgs: [id]);
+    }
+    if (count == 0 && name != null && name.trim().isNotEmpty) {
+      count = await db.delete(
+        'greenhouse',
+        where: 'LOWER(TRIM(nama_greenhouse)) = ?',
+        whereArgs: [name.trim().toLowerCase()],
+      );
+    }
+    return count;
+  }
+
   Future<int> updateGreenhousePlantConfig({
     required int id,
     required String jenisTanaman,

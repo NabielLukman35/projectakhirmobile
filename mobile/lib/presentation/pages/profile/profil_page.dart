@@ -107,9 +107,9 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
 
-    if (confirmed == true && gh.id != null) {
+    if (confirmed == true && (gh.id != null || gh.name.isNotEmpty)) {
       try {
-        await _greenhouseService.deleteGreenhouse(gh.id!);
+        await _greenhouseService.deleteGreenhouse(gh.id ?? '', name: gh.name);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

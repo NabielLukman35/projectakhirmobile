@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/local_db/database_helper.dart';
 import '../models/greenhouse_model.dart';
 
@@ -26,6 +27,14 @@ class GreenhouseService {
 
   /// Menambahkan greenhouse baru ke Firestore
   Future<String> addGreenhouse(GreenhouseModel greenhouse) async {
+    // Un-blacklist jika nama greenhouse dibuat ulang
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final deletedNames = prefs.getStringList('deleted_greenhouse_names') ?? [];
+      deletedNames.removeWhere((n) => n.toLowerCase().trim() == greenhouse.name.toLowerCase().trim());
+      await prefs.setStringList('deleted_greenhouse_names', deletedNames);
+    } catch (_) {}
+
     // 1. Coba menggunakan Firebase SDK jika aplikasi Firebase sudah terinisialisasi
     if (_isFirebaseReady && _firestore != null) {
       try {
@@ -140,6 +149,19 @@ class GreenhouseService {
     } catch (e) {
       debugPrint('[GreenhouseService] Local fetch note: $e');
     }
+
+    // Filter out deleted IDs/names (Offline-first & Cloud blacklist)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final deletedIds = (prefs.getStringList('deleted_greenhouse_ids') ?? []).toSet();
+      final deletedNames = (prefs.getStringList('deleted_greenhouse_names') ?? [])
+          .map((n) => n.toLowerCase().trim())
+          .toSet();
+
+      list.removeWhere((g) =>
+          (g.id != null && deletedIds.contains(g.id)) ||
+          deletedNames.contains(g.name.toLowerCase().trim()));
+    } catch (_) {}
 
     return list;
   }
@@ -489,28 +511,61 @@ class GreenhouseService {
     debugPrint('[GreenhouseService] resetPlantConfig sukses via REST: $id');
   }
 
-  /// Menghapus dokumen greenhouse berdasarkan ID
-  Future<void> deleteGreenhouse(String id) async {
-    final intId = int.tryParse(id);
-    if (intId != null) {
-      try {
-        await DatabaseHelper.instance.deleteGreenhouse(intId);
-      } catch (_) {}
+  /// Menghapus dokumen greenhouse berdasarkan ID dan/atau Nama (Offline-First)
+  Future<void> deleteGreenhouse(String id, {String? name}) async {
+    // 1. Simpan ke blacklist deleted agar tidak muncul kembali meski cloud read-only / 403
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final deletedIds = prefs.getStringList('deleted_greenhouse_ids') ?? [];
+      if (!deletedIds.contains(id)) {
+        deletedIds.add(id);
+        await prefs.setStringList('deleted_greenhouse_ids', deletedIds);
+      }
+      if (name != null && name.trim().isNotEmpty) {
+        final deletedNames = prefs.getStringList('deleted_greenhouse_names') ?? [];
+        if (!deletedNames.contains(name.trim())) {
+          deletedNames.add(name.trim());
+          await prefs.setStringList('deleted_greenhouse_names', deletedNames);
+        }
+      }
+    } catch (e) {
+      debugPrint('[GreenhouseService] Blacklist save note: $e');
     }
 
+    // 2. Hapus dari database SQLite lokal (Offline-First)
+    try {
+      final intId = int.tryParse(id);
+      await DatabaseHelper.instance.deleteGreenhouseByNameOrId(
+        id: intId,
+        name: name,
+      );
+      debugPrint('[GreenhouseService] Local SQLite delete success: id=$id, name=$name');
+    } catch (e) {
+      debugPrint('[GreenhouseService] Local SQLite delete error: $e');
+    }
+
+    // 3. Coba hapus via Firebase SDK jika siap
     if (_isFirebaseReady && _firestore != null) {
       try {
         await _firestore!.collection('greenhouses').doc(id).delete();
+        debugPrint('[GreenhouseService] SDK delete success: $id');
         return;
       } catch (e) {
-        debugPrint('[GreenhouseService] SDK delete error, fallback REST: $e');
+        debugPrint('[GreenhouseService] SDK delete note (handled locally): $e');
       }
     }
 
-    final url = '$restBaseUrl/$id';
-    final res = await http.delete(Uri.parse(url));
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('Gagal menghapus via REST: ${res.statusCode}');
+    // 4. Coba hapus via Firestore REST API (jangan throw jika 403 atau offline)
+    try {
+      final url = '$restBaseUrl/$id';
+      final res = await http.delete(Uri.parse(url));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        debugPrint('[GreenhouseService] REST delete success: $id');
+        return;
+      }
+      debugPrint('[GreenhouseService] REST delete status: ${res.statusCode} (handled offline-first)');
+    } catch (e) {
+      debugPrint('[GreenhouseService] REST delete note: $e');
     }
   }
 }

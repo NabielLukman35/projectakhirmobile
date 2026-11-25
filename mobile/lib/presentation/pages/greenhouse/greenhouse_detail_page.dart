@@ -444,11 +444,14 @@ class _GreenhouseDetailPageState extends State<GreenhouseDetailPage> {
       ),
     );
 
-    if (confirmed == true && _currentGreenhouse.id != null) {
+    if (confirmed == true && (_currentGreenhouse.id != null || _currentGreenhouse.name.isNotEmpty)) {
       setState(() => _isLoading = true);
       try {
         _iotTimer?.cancel();
-        await _greenhouseService.deleteGreenhouse(_currentGreenhouse.id!);
+        await _greenhouseService.deleteGreenhouse(
+          _currentGreenhouse.id ?? '',
+          name: _currentGreenhouse.name,
+        );
         if (mounted) {
           setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(
