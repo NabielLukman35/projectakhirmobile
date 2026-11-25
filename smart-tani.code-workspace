@@ -1,0 +1,25 @@
+{
+	"folders": [
+		{
+			"name": "Smart-Tani",
+			"path": "."
+		},
+		{
+			"name": "Mobile",
+			"path": "mobile"
+		},
+		{
+			"name": "IoT",
+			"path": "iot"
+		},
+		{
+			"name": "Backend",
+			"path": "backend"
+		}
+	],
+	"settings": {
+		"dart.flutterSdkPath": "C:\\flutter",
+		"C_Cpp.errorSquiggles": "disabled",
+		"C_Cpp.intelliSenseEngine": "disabled"
+	}
+}

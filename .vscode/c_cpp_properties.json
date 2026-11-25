@@ -1,0 +1,22 @@
+{
+  "configurations": [
+    {
+      "name": "NodeMCU (ESP8266)",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/iot/include/**",
+        "${workspaceFolder}/iot/.pio/libdeps/nodemcuv2/**"
+      ],
+      "defines": [
+        "ESP8266",
+        "ARDUINO=10805",
+        "ARDUINO_ARCH_ESP8266",
+        "ENABLE_FIREBASE_ESP8266"
+      ],
+      "cStandard": "c11",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "windows-clang-x64"
+    }
+  ],
+  "version": 4
+}
