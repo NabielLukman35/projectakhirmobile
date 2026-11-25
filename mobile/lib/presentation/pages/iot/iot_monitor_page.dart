@@ -4,6 +4,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/local_db/database_helper.dart';
 import '../../../models/greenhouse_model.dart';
 import '../../../services/greenhouse_service.dart';
+import '../../../views/add_greenhouse_sheet.dart';
 import '../../widgets/custom_sub_app_bar.dart';
 import 'iot_monitoring_page.dart';
 
@@ -43,7 +44,7 @@ class _IoTMonitorPageState extends State<IoTMonitorPage> {
 
       // Fallback ke SQLite jika cloud kosong
       if (list.isEmpty) {
-        final dbRows = await DatabaseHelper.instance.getGreenhousesByUser(1);
+        final dbRows = await DatabaseHelper.instance.getAllGreenhouses();
         if (dbRows.isNotEmpty) {
           list = dbRows.map((row) {
             return GreenhouseModel(
@@ -61,52 +62,15 @@ class _IoTMonitorPageState extends State<IoTMonitorPage> {
         }
       }
 
-      // Jika tetap kosong, gunakan unit greenhouse default
-      if (list.isEmpty) {
-        list = [
-          GreenhouseModel(
-            id: '1',
-            name: 'Greenhouse Utama (A)',
-            area: 120.0,
-            latitude: -6.2088,
-            longitude: 106.8456,
-            plantType: 'Tomat',
-            plantVariety: 'Cherry Ruby',
-            soilType: 'Cocopeat & Sekam',
-            iotDeviceId: 'GH_01',
-          ),
-          GreenhouseModel(
-            id: '2',
-            name: 'Greenhouse B (Sayur Daun)',
-            area: 95.0,
-            latitude: -6.2095,
-            longitude: 106.8462,
-            plantType: 'Selada',
-            plantVariety: 'Romaine Hijau',
-            soilType: 'Hidroponik NFT',
-            iotDeviceId: 'GH_02',
-          ),
-          GreenhouseModel(
-            id: '3',
-            name: 'Greenhouse C (Hortikultura)',
-            area: 150.0,
-            latitude: -6.2102,
-            longitude: 106.8470,
-            plantType: 'Cabai Rawit',
-            plantVariety: 'Hibrida Unggul',
-            soilType: 'Tanah Humus Subur',
-            iotDeviceId: 'GH_03',
-          ),
-        ];
-      }
-
       if (mounted) {
         setState(() {
           _greenhouses = list;
-          _selectedGreenhouse = list.first;
+          _selectedGreenhouse = list.isNotEmpty ? list.first : null;
           _isLoadingGreenhouses = false;
         });
-        _fetchTelemetryForSelected();
+        if (list.isNotEmpty) {
+          _fetchTelemetryForSelected();
+        }
       }
     } catch (e) {
       debugPrint('[IoTMonitor] Error in _loadGreenhouses: $e');
@@ -154,7 +118,20 @@ class _IoTMonitorPageState extends State<IoTMonitorPage> {
   /// Sensor aktif: Suhu Udara, Kelembapan Udara, dan Intensitas Cahaya
   Map<String, dynamic> _computeParametersForCurrentGh() {
     final gh = _selectedGreenhouse;
-    final ghIndex = gh != null ? _greenhouses.indexOf(gh) : 0;
+    if (gh == null) {
+      return {
+        'suhu': 0.0,
+        'statusSuhu': 'Tidak Ada Unit',
+        'colorSuhu': AppTheme.textGrey,
+        'kelembapan': 0.0,
+        'statusLembap': 'Tidak Ada Unit',
+        'colorLembap': AppTheme.textGrey,
+        'cahaya': 0.0,
+        'statusCahaya': 'Tidak Ada Unit',
+        'colorCahaya': AppTheme.textGrey,
+      };
+    }
+    final ghIndex = _greenhouses.indexOf(gh);
 
     // Nilai acuan default per greenhouse jika belum ada streaming live
     double baseTemp;
@@ -250,6 +227,90 @@ class _IoTMonitorPageState extends State<IoTMonitorPage> {
     };
   }
 
+  Widget _buildEmptyGreenhouseState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: AppTheme.emeraldGreen.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppTheme.neonLime.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: AppTheme.neonLime.withValues(alpha: 0.3),
+                width: 1.5,
+              ),
+            ),
+            child: const Icon(
+              Icons.roofing_rounded,
+              size: 40,
+              color: AppTheme.neonLime,
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Belum Ada Unit Greenhouse',
+            style: TextStyle(
+              color: AppTheme.creamWhite,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Pilihan unit greenhouse saat ini kosong karena Anda belum menambahkan unit lahan. Daftarkan unit greenhouse pertama Anda untuk mulai memantau sensor mikroklimat IoT (suhu, kelembapan, cahaya) secara real-time.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppTheme.textGrey.withValues(alpha: 0.9),
+              fontSize: 12.5,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                final result = await AddGreenhouseSheet.show(context);
+                if (result == true) {
+                  _loadGreenhouses();
+                }
+              },
+              icon: const Icon(Icons.add_rounded, size: 20),
+              label: const Text(
+                'Tambah Unit Greenhouse Sekarang',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13.5,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonLime,
+                foregroundColor: AppTheme.darkForest,
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final params = _computeParametersForCurrentGh();
@@ -271,7 +332,9 @@ class _IoTMonitorPageState extends State<IoTMonitorPage> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Memperbarui telemetri ${_selectedGreenhouse?.name ?? "greenhouse"}...',
+                          _selectedGreenhouse != null
+                              ? 'Memperbarui telemetri ${_selectedGreenhouse!.name}...'
+                              : 'Memperbarui data sensor...',
                           style: const TextStyle(color: AppTheme.darkForest),
                         ),
                         backgroundColor: AppTheme.neonLime,
@@ -310,226 +373,290 @@ class _IoTMonitorPageState extends State<IoTMonitorPage> {
                 ),
               ),
               Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Status Banner
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppTheme.panel,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: AppTheme.emeraldGreen.withValues(alpha: 0.45),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: AppTheme.neonLime.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.sensors_rounded,
-                                color: AppTheme.neonLime,
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Text(
-                                        'Node IoT Sensor Terhubung',
-                                        style: TextStyle(
-                                          color: AppTheme.creamWhite,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 13.5,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: _liveTelemetry != null
-                                              ? AppTheme.neonLime.withValues(alpha: 0.2)
-                                              : Colors.amber.withValues(alpha: 0.2),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          _liveTelemetry != null ? 'CLOUD LIVE' : 'SYNC DB',
-                                          style: TextStyle(
-                                            color: _liveTelemetry != null
-                                                ? AppTheme.neonLime
-                                                : Colors.amber,
-                                            fontSize: 9.5,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _selectedGreenhouse != null
-                                        ? '${_selectedGreenhouse!.name} • Device ID: ${_selectedGreenhouse!.iotDeviceId ?? "GH_NODE_01"}'
-                                        : 'Protokol MQTT • Update tiap 5 detik',
-                                    style: const TextStyle(
-                                      color: AppTheme.pastelLime,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-
-                      // Pemilih Greenhouse Interaktif
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Pilih Unit Greenhouse',
-                            style: TextStyle(
-                              color: AppTheme.creamWhite,
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          if (_greenhouses.isNotEmpty)
-                            Text(
-                              '${_greenhouses.length} Greenhouse Terdaftar',
-                              style: const TextStyle(
-                                color: AppTheme.pastelLime,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-
-                      if (_isLoadingGreenhouses)
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(20),
-                            child: CircularProgressIndicator(color: AppTheme.neonLime),
-                          ),
-                        )
-                      else
-                        SizedBox(
-                          height: 78,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _greenhouses.length,
-                            separatorBuilder: (_, __) => const SizedBox(width: 10),
-                            itemBuilder: (context, index) {
-                              final gh = _greenhouses[index];
-                              final isSelected = gh == _selectedGreenhouse;
-
-                              return InkWell(
-                                onTap: () {
-                                  setState(() {
-                                    _selectedGreenhouse = gh;
-                                    _liveTelemetry = null;
-                                  });
-                                  _fetchTelemetryForSelected();
-                                },
-                                borderRadius: BorderRadius.circular(14),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  width: 190,
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: _isLoadingGreenhouses
+                    ? const Center(
+                        child: CircularProgressIndicator(color: AppTheme.neonLime),
+                      )
+                    : _greenhouses.isEmpty
+                        ? SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.all(20),
+                            child: _buildEmptyGreenhouseState(),
+                          )
+                        : SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Status Banner
+                                Container(
+                                  padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? AppTheme.emeraldGreen.withValues(alpha: 0.35)
-                                        : AppTheme.cardSurface,
-                                    borderRadius: BorderRadius.circular(14),
+                                    color: AppTheme.panel,
+                                    borderRadius: BorderRadius.circular(18),
                                     border: Border.all(
-                                      color: isSelected
-                                          ? AppTheme.neonLime
-                                          : AppTheme.emeraldGreen.withValues(alpha: 0.3),
-                                      width: isSelected ? 1.8 : 1.0,
+                                      color: AppTheme.emeraldGreen.withValues(alpha: 0.45),
                                     ),
                                   ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                  child: Row(
                                     children: [
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.home_work_rounded,
-                                            size: 16,
-                                            color: isSelected ? AppTheme.neonLime : AppTheme.textGrey,
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: Text(
-                                              gh.name,
-                                              style: TextStyle(
-                                                color: isSelected ? AppTheme.creamWhite : AppTheme.textGrey,
-                                                fontWeight: FontWeight.w700,
-                                                fontSize: 12.5,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        gh.plantType != null && gh.plantType!.isNotEmpty
-                                            ? '${gh.plantType} (${gh.plantVariety ?? "-"})'
-                                            : 'Luas: ${gh.area.toStringAsFixed(0)} m²',
-                                        style: TextStyle(
-                                          color: isSelected ? AppTheme.pastelLime : AppTheme.textGrey.withValues(alpha: 0.7),
-                                          fontSize: 10.5,
-                                          fontWeight: FontWeight.w500,
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.neonLime.withValues(alpha: 0.18),
+                                          borderRadius: BorderRadius.circular(12),
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                        child: const Icon(
+                                          Icons.sensors_rounded,
+                                          color: AppTheme.neonLime,
+                                          size: 24,
+                                        ),
                                       ),
-                                      const SizedBox(height: 2),
-                                      Row(
-                                        children: [
-                                          Container(
-                                            width: 6,
-                                            height: 6,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: gh.hasIotDevice ? AppTheme.neonLime : Colors.grey,
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                const Text(
+                                                  'Node IoT Sensor Terhubung',
+                                                  style: TextStyle(
+                                                    color: AppTheme.creamWhite,
+                                                    fontWeight: FontWeight.w700,
+                                                    fontSize: 13.5,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: _liveTelemetry != null
+                                                        ? AppTheme.neonLime.withValues(alpha: 0.2)
+                                                        : Colors.amber.withValues(alpha: 0.2),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    _liveTelemetry != null ? 'CLOUD LIVE' : 'SYNC DB',
+                                                    style: TextStyle(
+                                                      color: _liveTelemetry != null
+                                                          ? AppTheme.neonLime
+                                                          : Colors.amber,
+                                                      fontSize: 9.5,
+                                                      fontWeight: FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            gh.hasIotDevice ? 'Node: ${gh.iotDeviceId}' : 'Sensor Log Lokal',
-                                            style: TextStyle(
-                                              color: isSelected ? AppTheme.creamWhite : AppTheme.textGrey,
-                                              fontSize: 9.5,
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              _selectedGreenhouse != null
+                                                  ? '${_selectedGreenhouse!.name} • Device ID: ${_selectedGreenhouse!.iotDeviceId ?? "GH_NODE_01"}'
+                                                  : 'Protokol MQTT • Update tiap 5 detik',
+                                              style: const TextStyle(
+                                                color: AppTheme.pastelLime,
+                                                fontSize: 11,
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
-                              );
-                            },
-                          ),
-                        ),
+                                const SizedBox(height: 18),
+
+                                // Pemilih Greenhouse Interaktif
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Pilih Unit Greenhouse',
+                                      style: TextStyle(
+                                        color: AppTheme.creamWhite,
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () async {
+                                        final result = await AddGreenhouseSheet.show(context);
+                                        if (result == true) {
+                                          _loadGreenhouses();
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.neonLime.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: AppTheme.neonLime.withValues(alpha: 0.4),
+                                          ),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.add_rounded, size: 14, color: AppTheme.neonLime),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Tambah Unit',
+                                              style: TextStyle(
+                                                color: AppTheme.neonLime,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+
+                                SizedBox(
+                                  height: 78,
+                                  child: ListView.separated(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: _greenhouses.length + 1,
+                                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                                    itemBuilder: (context, index) {
+                                      if (index == _greenhouses.length) {
+                                        return InkWell(
+                                          onTap: () async {
+                                            final result = await AddGreenhouseSheet.show(context);
+                                            if (result == true) {
+                                              _loadGreenhouses();
+                                            }
+                                          },
+                                          borderRadius: BorderRadius.circular(14),
+                                          child: Container(
+                                            width: 130,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.cardSurface,
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: AppTheme.emeraldGreen.withValues(alpha: 0.35),
+                                              ),
+                                            ),
+                                            child: const Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.add_circle_outline_rounded,
+                                                    size: 24, color: AppTheme.neonLime),
+                                                SizedBox(height: 6),
+                                                Text(
+                                                  '+ Tambah Unit',
+                                                  style: TextStyle(
+                                                    color: AppTheme.neonLime,
+                                                    fontSize: 11.5,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      final gh = _greenhouses[index];
+                                      final isSelected = gh == _selectedGreenhouse;
+
+                                      return InkWell(
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedGreenhouse = gh;
+                                            _liveTelemetry = null;
+                                          });
+                                          _fetchTelemetryForSelected();
+                                        },
+                                        borderRadius: BorderRadius.circular(14),
+                                        child: AnimatedContainer(
+                                          duration: const Duration(milliseconds: 200),
+                                          width: 190,
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: isSelected
+                                                ? AppTheme.emeraldGreen.withValues(alpha: 0.35)
+                                                : AppTheme.cardSurface,
+                                            borderRadius: BorderRadius.circular(14),
+                                            border: Border.all(
+                                              color: isSelected
+                                                  ? AppTheme.neonLime
+                                                  : AppTheme.emeraldGreen.withValues(alpha: 0.3),
+                                              width: isSelected ? 1.8 : 1.0,
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.home_work_rounded,
+                                                    size: 16,
+                                                    color: isSelected ? AppTheme.neonLime : AppTheme.textGrey,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: Text(
+                                                      gh.name,
+                                                      style: TextStyle(
+                                                        color: isSelected ? AppTheme.creamWhite : AppTheme.textGrey,
+                                                        fontWeight: FontWeight.w700,
+                                                        fontSize: 12.5,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                gh.plantType != null && gh.plantType!.isNotEmpty
+                                                    ? '${gh.plantType} (${gh.plantVariety ?? "-"})'
+                                                    : 'Luas: ${gh.area.toStringAsFixed(0)} m²',
+                                                style: TextStyle(
+                                                  color: isSelected ? AppTheme.pastelLime : AppTheme.textGrey.withValues(alpha: 0.7),
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Row(
+                                                children: [
+                                                  Container(
+                                                    width: 6,
+                                                    height: 6,
+                                                    decoration: BoxDecoration(
+                                                      shape: BoxShape.circle,
+                                                      color: gh.hasIotDevice ? AppTheme.neonLime : Colors.grey,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    gh.hasIotDevice ? 'Node: ${gh.iotDeviceId}' : 'Sensor Log Lokal',
+                                                    style: TextStyle(
+                                                      color: isSelected ? AppTheme.creamWhite : AppTheme.textGrey,
+                                                      fontSize: 9.5,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
 
                       const SizedBox(height: 16),
 
@@ -542,7 +669,7 @@ class _IoTMonitorPageState extends State<IoTMonitorPage> {
                               builder: (_) => IotMonitoringPage(
                                 greenhouse: {
                                   'id': int.tryParse(gh?.id ?? '') ?? 1,
-                                  'nama_greenhouse': gh?.name ?? 'Greenhouse Utama (A)',
+                                  'nama_greenhouse': gh?.name ?? 'Greenhouse',
                                   'biaya_operasional_idr': 1500000.0,
                                   'batas_suhu_maks': 35.0,
                                   'batas_lembap_min': 40.0,
