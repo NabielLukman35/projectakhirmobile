@@ -345,4 +345,107 @@ class NotificationService {
       debugPrint('Error canceling notification $id: $e');
     }
   }
+
+  /// FR-12: Menjadwalkan notifikasi berkala pengingat perawatan (tiap 5, 10, 15, 30, 60 menit)
+  Future<void> schedulePeriodicCareNotifications({
+    required int intervalMinutes,
+    String? greenhouseName,
+    List<String>? upcomingTasks,
+  }) async {
+    await init();
+    await cancelPeriodicCareNotifications();
+
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'smart_tani_care_periodic_channel',
+      'Smart Tani Pengingat Perawatan Berkala',
+      channelDescription:
+          'Pengingat berkala tugas penyiraman, pemupukan, dan kontrol nutrisi tanaman',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      category: AndroidNotificationCategory.reminder,
+      icon: '@mipmap/ic_launcher',
+      styleInformation: BigTextStyleInformation(''),
+    );
+
+    const NotificationDetails notificationDetails = NotificationDetails(
+      android: androidDetails,
+    );
+
+    final now = DateTime.now();
+    final gh = greenhouseName ?? 'Lahan Greenhouse';
+    final taskText = (upcomingTasks != null && upcomingTasks.isNotEmpty)
+        ? upcomingTasks.take(2).join(', ')
+        : 'Penyiraman, nutrisi AB Mix, & cek kelembapan';
+
+    final int repeatCount = (24 * 60 ~/ intervalMinutes).clamp(1, 48);
+
+    for (int i = 1; i <= repeatCount; i++) {
+      final scheduledTime = now.add(Duration(minutes: i * intervalMinutes));
+      final tzScheduled = tz.TZDateTime.from(scheduledTime, tz.local);
+      final int notifId = 800000 + i;
+
+      try {
+        await _plugin.zonedSchedule(
+          notifId,
+          '🌱 [Sinkron Perawatan] $gh (Tiap $intervalMinutes mnt)',
+          'Waktunya pengecekan rutin: $taskText. Pastikan kondisi tanaman tetap prima!',
+          tzScheduled,
+          notificationDetails,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+      } catch (e) {
+        debugPrint('Error scheduling care periodic item $i: $e');
+      }
+    }
+  }
+
+  /// Membatalkan notifikasi berkala pengingat perawatan
+  Future<void> cancelPeriodicCareNotifications() async {
+    await init();
+    for (int i = 1; i <= 50; i++) {
+      try {
+        await _plugin.cancel(800000 + i);
+      } catch (_) {}
+    }
+  }
+
+  /// Mengirim notifikasi tes langsung untuk pengingat jadwal perawatan
+  Future<void> showCareTestNotification({
+    String? greenhouseName,
+    int? intervalMinutes,
+  }) async {
+    await init();
+    final gh = greenhouseName ?? 'Lahan Greenhouse';
+    final intv = intervalMinutes != null ? ' (Interval: setiap $intervalMinutes menit)' : '';
+
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'smart_tani_care_periodic_channel',
+      'Smart Tani Pengingat Perawatan Berkala',
+      channelDescription:
+          'Pengingat berkala tugas penyiraman, pemupukan, dan kontrol nutrisi tanaman',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      fullScreenIntent: true,
+      category: AndroidNotificationCategory.reminder,
+      icon: '@mipmap/ic_launcher',
+      styleInformation: BigTextStyleInformation(''),
+    );
+
+    const NotificationDetails notificationDetails = NotificationDetails(
+      android: androidDetails,
+    );
+
+    await _plugin.show(
+      DateTime.now().millisecond + 500,
+      '🌱 [Sinkronisasi Notifikasi Aktif] $gh',
+      'Notifikasi pengingat jadwal perawatan berhasil diaktifkan$intv. Anda akan menerima pemberitahuan tepat waktu!',
+      notificationDetails,
+    );
+  }
 }

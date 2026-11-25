@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/gemini_services.dart';
 import '../../../core/services/notification_service.dart';
@@ -34,10 +35,152 @@ class _JadwalTanamPageState extends State<JadwalTanamPage> {
   bool _isGeneratingAi = false;
   List<Map<String, dynamic>> _schedules = [];
 
+  // ── FR-12: Fitur Notifikasi & Sinkronisasi Berkala ──
+  bool _isNotificationEnabled = true;
+  int _notificationIntervalMinutes = 15;
+  bool _showNotificationPanel = true;
+
   @override
   void initState() {
     super.initState();
+    _loadNotificationPrefs();
     _loadSchedulesFromDB();
+  }
+
+  Future<void> _loadNotificationPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keyPrefix = widget.greenhouse != null ? 'gh_${widget.greenhouse!.id}_care' : 'all_care';
+      final enabled = prefs.getBool('${keyPrefix}_notif_enabled') ?? true;
+      final interval = prefs.getInt('${keyPrefix}_notif_interval') ?? 15;
+      if (mounted) {
+        setState(() {
+          _isNotificationEnabled = enabled;
+          _notificationIntervalMinutes = interval;
+        });
+        if (enabled) {
+          _syncPeriodicNotifications();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading notification prefs: $e');
+    }
+  }
+
+  Future<void> _toggleNotification(bool value) async {
+    setState(() => _isNotificationEnabled = value);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keyPrefix = widget.greenhouse != null ? 'gh_${widget.greenhouse!.id}_care' : 'all_care';
+      await prefs.setBool('${keyPrefix}_notif_enabled', value);
+      await prefs.setInt('${keyPrefix}_notif_interval', _notificationIntervalMinutes);
+
+      if (value) {
+        await _syncPeriodicNotifications();
+        await NotificationService.instance.showCareTestNotification(
+          greenhouseName: widget.greenhouse?.name,
+          intervalMinutes: _notificationIntervalMinutes,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.notifications_active_rounded, color: AppTheme.darkForest, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Notifikasi pengingat perawatan aktif (setiap $_notificationIntervalMinutes menit)!',
+                      style: const TextStyle(color: AppTheme.darkForest, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppTheme.neonLime,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        await NotificationService.instance.cancelPeriodicCareNotifications();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Notifikasi berkala pengingat perawatan dimatikan.'),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error toggle notification: $e');
+    }
+  }
+
+  Future<void> _changeNotificationInterval(int minutes) async {
+    setState(() => _notificationIntervalMinutes = minutes);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keyPrefix = widget.greenhouse != null ? 'gh_${widget.greenhouse!.id}_care' : 'all_care';
+      await prefs.setInt('${keyPrefix}_notif_interval', minutes);
+
+      if (_isNotificationEnabled) {
+        await _syncPeriodicNotifications();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Interval pengingat diperbarui: setiap $minutes menit.'),
+              backgroundColor: AppTheme.neonLime,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error change notification interval: $e');
+    }
+  }
+
+  Future<void> _syncPeriodicNotifications() async {
+    final upcoming = _schedules
+        .where((s) => s['status'] != 'Selesai')
+        .map((s) => s['jenis_perawatan'] as String? ?? 'Perawatan')
+        .toList();
+    await NotificationService.instance.schedulePeriodicCareNotifications(
+      intervalMinutes: _notificationIntervalMinutes,
+      greenhouseName: widget.greenhouse?.name ?? 'Smart Tani',
+      upcomingTasks: upcoming,
+    );
+  }
+
+  Future<void> _testNotificationNow() async {
+    await NotificationService.instance.showCareTestNotification(
+      greenhouseName: widget.greenhouse?.name ?? 'Greenhouse Smart Tani',
+      intervalMinutes: _notificationIntervalMinutes,
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: AppTheme.darkForest, size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Notifikasi tes pengingat berhasil dikirim ke status bar HP!',
+                  style: TextStyle(color: AppTheme.darkForest, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppTheme.neonLime,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _loadSchedulesFromDB() async {
@@ -57,6 +200,9 @@ class _JadwalTanamPageState extends State<JadwalTanamPage> {
           _schedules = List<Map<String, dynamic>>.from(list);
           _isLoading = false;
         });
+        if (_isNotificationEnabled) {
+          _syncPeriodicNotifications();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -885,6 +1031,171 @@ class _JadwalTanamPageState extends State<JadwalTanamPage> {
     );
   }
 
+  Widget _buildNotificationSettingsCard() {
+    final intervals = [5, 10, 15, 30, 60];
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _isNotificationEnabled
+              ? AppTheme.neonLime.withValues(alpha: 0.45)
+              : AppTheme.borderQuiet,
+          width: 1.2,
+        ),
+        boxShadow: [
+          if (_isNotificationEnabled)
+            BoxShadow(
+              color: AppTheme.neonLime.withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (_isNotificationEnabled ? AppTheme.neonLime : AppTheme.textGrey)
+                      .withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.notifications_active_rounded,
+                  color: _isNotificationEnabled ? AppTheme.neonLime : AppTheme.textGrey,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Notifikasi Pengingat Perawatan',
+                      style: TextStyle(
+                        color: AppTheme.creamWhite,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _isNotificationEnabled
+                          ? 'Aktif • Notifikasi berkala tiap $_notificationIntervalMinutes menit'
+                          : 'Nonaktif • Hidupkan untuk pengingat berkala',
+                      style: TextStyle(
+                        color: _isNotificationEnabled ? AppTheme.pastelLime : AppTheme.textGrey,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _isNotificationEnabled,
+                onChanged: _toggleNotification,
+                activeThumbColor: AppTheme.neonLime,
+                activeTrackColor: AppTheme.neonLime.withValues(alpha: 0.3),
+              ),
+            ],
+          ),
+          if (_isNotificationEnabled) ...[
+            const SizedBox(height: 14),
+            const Divider(color: AppTheme.borderQuiet, height: 1),
+            const SizedBox(height: 12),
+            const Text(
+              'Interval Notifikasi Pengingat & Sinkronisasi:',
+              style: TextStyle(
+                color: AppTheme.creamWhite,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: intervals.map((m) {
+                  final isSelected = _notificationIntervalMinutes == m;
+                  final label = m == 60 ? '1 Jam' : '$m Menit';
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(label),
+                      selected: isSelected,
+                      onSelected: (_) => _changeNotificationInterval(m),
+                      selectedColor: AppTheme.neonLime,
+                      backgroundColor: const Color(0xFF143B33),
+                      labelStyle: TextStyle(
+                        color: isSelected ? AppTheme.darkForest : AppTheme.creamWhite,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontSize: 11.5,
+                      ),
+                      side: BorderSide(
+                        color: isSelected
+                            ? AppTheme.neonLime
+                            : AppTheme.emeraldGreen.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF102E27),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.emeraldGreen.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded, size: 14, color: AppTheme.neonLime),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'HP akan menerima notifikasi pengingat otomatis setiap $_notificationIntervalMinutes menit.',
+                      style: const TextStyle(color: AppTheme.textGrey, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 38,
+              child: OutlinedButton.icon(
+                onPressed: _testNotificationNow,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.neonLime,
+                  side: BorderSide(color: AppTheme.neonLime.withValues(alpha: 0.6)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.send_rounded, size: 14),
+                label: const Text(
+                  'Uji Coba Notifikasi Sekarang',
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final list = _filteredAndSortedSchedules;
@@ -905,6 +1216,55 @@ class _JadwalTanamPageState extends State<JadwalTanamPage> {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Tombol Notifikasi Pengingat
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _showNotificationPanel = !_showNotificationPanel;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _isNotificationEnabled
+                              ? AppTheme.neonLime.withValues(alpha: 0.2)
+                              : AppTheme.neonLime.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _isNotificationEnabled
+                                ? AppTheme.neonLime
+                                : AppTheme.neonLime.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Icon(
+                              _isNotificationEnabled
+                                  ? Icons.notifications_active_rounded
+                                  : Icons.notifications_none_rounded,
+                              color: AppTheme.neonLime,
+                              size: 19,
+                            ),
+                            if (_isNotificationEnabled)
+                              Positioned(
+                                right: -2,
+                                top: -2,
+                                child: Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: const BoxDecoration(
+                                    color: AppTheme.neonLime,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
                     // Tombol Otomatisasi AI Cepat di Header
                     GestureDetector(
                       onTap: _isGeneratingAi ? null : _generateAiWeeklySchedule,
@@ -976,6 +1336,40 @@ class _JadwalTanamPageState extends State<JadwalTanamPage> {
                   ],
                 ),
               ),
+
+              // Notifikasi Settings Card (Dapat diciutkan / dibuka)
+              if (_showNotificationPanel)
+                _buildNotificationSettingsCard()
+              else if (_isNotificationEnabled)
+                GestureDetector(
+                  onTap: () => setState(() => _showNotificationPanel = true),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonLime.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.neonLime.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.notifications_active_rounded, size: 14, color: AppTheme.neonLime),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Pengingat aktif setiap $_notificationIntervalMinutes menit • Ketuk untuk ubah interval',
+                            style: const TextStyle(
+                              color: AppTheme.pastelLime,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: AppTheme.neonLime),
+                      ],
+                    ),
+                  ),
+                ),
 
               // Filter Chips
               Padding(
