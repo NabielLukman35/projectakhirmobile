@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../data/local_db/database_helper.dart';
 import '../models/greenhouse_model.dart';
 
 /// Service untuk menangani operasi CRUD ke Firebase Firestore pada collection 'greenhouses'
@@ -93,13 +94,14 @@ class GreenhouseService {
 
   /// Mengambil daftar greenhouse dari Firestore
   Future<List<GreenhouseModel>> fetchGreenhouses() async {
+    List<GreenhouseModel> list = [];
     if (_isFirebaseReady && _firestore != null) {
       try {
         final snapshot = await _firestore!
             .collection('greenhouses')
             .orderBy('created_at', descending: true)
             .get();
-        return snapshot.docs
+        list = snapshot.docs
             .map((doc) => GreenhouseModel.fromFirestore(doc))
             .toList();
       } catch (e) {
@@ -107,7 +109,39 @@ class GreenhouseService {
       }
     }
 
-    return await _fetchViaRest();
+    if (list.isEmpty) {
+      list = await _fetchViaRest();
+    }
+
+    // Integrasi Offline-First: Muat data dari SQLite lokal
+    try {
+      final localRows = await DatabaseHelper.instance.getAllGreenhouses();
+      final localList = localRows.map((row) {
+        return GreenhouseModel(
+          id: row['id']?.toString(),
+          name: row['nama_greenhouse'] ?? 'Greenhouse',
+          area: (row['luas'] as num?)?.toDouble() ?? 100.0,
+          latitude: (row['latitude'] as num?)?.toDouble() ?? -7.7956,
+          longitude: (row['longitude'] as num?)?.toDouble() ?? 110.3695,
+          plantType: row['jenis_tanaman'],
+          plantVariety: row['varietas'],
+          soilType: row['jenis_tanah'],
+          plantingDate: row['tanggal_tanam'] != null ? DateTime.tryParse(row['tanggal_tanam']) : null,
+          createdAt: DateTime.now(),
+        );
+      }).toList();
+
+      final existingNames = list.map((g) => g.name.toLowerCase().trim()).toSet();
+      for (final local in localList) {
+        if (!existingNames.contains(local.name.toLowerCase().trim())) {
+          list.add(local);
+        }
+      }
+    } catch (e) {
+      debugPrint('[GreenhouseService] Local fetch note: $e');
+    }
+
+    return list;
   }
 
   Future<List<GreenhouseModel>> _fetchViaRest() async {
@@ -457,6 +491,13 @@ class GreenhouseService {
 
   /// Menghapus dokumen greenhouse berdasarkan ID
   Future<void> deleteGreenhouse(String id) async {
+    final intId = int.tryParse(id);
+    if (intId != null) {
+      try {
+        await DatabaseHelper.instance.deleteGreenhouse(intId);
+      } catch (_) {}
+    }
+
     if (_isFirebaseReady && _firestore != null) {
       try {
         await _firestore!.collection('greenhouses').doc(id).delete();

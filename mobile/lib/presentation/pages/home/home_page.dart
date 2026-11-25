@@ -414,9 +414,13 @@ class _HomePageState extends State<HomePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'Unit Greenhouse Anda',
-              style: AppTheme.sectionTitle,
+            const Expanded(
+              child: Text(
+                'Unit Greenhouse Anda',
+                style: AppTheme.sectionTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             Row(
               children: [

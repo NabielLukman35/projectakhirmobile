@@ -4,9 +4,12 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 
 import '../core/theme/app_theme.dart';
+import '../data/local_db/database_helper.dart';
 import '../models/greenhouse_model.dart';
+import '../presentation/providers/auth_providers.dart';
 import '../services/greenhouse_service.dart';
 
 /// Form Modal Bottom Sheet untuk menambahkan data Greenhouse baru ke Firebase Firestore
@@ -154,6 +157,9 @@ class _AddGreenhouseSheetState extends State<AddGreenhouseSheet> {
     setState(() => _isSubmitting = true);
 
     try {
+      final authProvider = context.read<AuthProvider>();
+      final userId = authProvider.currentUser?.id ?? 1;
+
       final newGreenhouse = GreenhouseModel(
         name: _nameController.text.trim(),
         area: areaValue,
@@ -162,59 +168,98 @@ class _AddGreenhouseSheetState extends State<AddGreenhouseSheet> {
         createdAt: DateTime.now(),
       );
 
-      await _greenhouseService.addGreenhouse(newGreenhouse);
+      // 1. Simpan ke database lokal SQLite terlebih dahulu (Offline-First FR-03)
+      bool savedLocal = false;
+      try {
+        await DatabaseHelper.instance.insertGreenhouse({
+          'pengguna_id': userId,
+          'nama_greenhouse': newGreenhouse.name,
+          'latitude': newGreenhouse.latitude,
+          'longitude': newGreenhouse.longitude,
+          'alamat': _addressPreview,
+          'luas': newGreenhouse.area,
+          'biaya_operasional_idr': 1500000.0,
+          'batas_suhu_maks': 35.0,
+          'batas_lembap_min': 40.0,
+          'status': 'Normal',
+          'jenis_tanaman': 'Melon',
+          'varietas': 'Golden Emerald',
+          'jenis_tanah': 'Cocopeat & Arang Sekam',
+          'tanggal_tanam': DateTime.now().toIso8601String(),
+          'sync_status': 'Menunggu Unggah',
+        });
+        savedLocal = true;
+      } catch (dbErr) {
+        debugPrint('Error insert SQLite lokal: $dbErr');
+      }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppTheme.panelElevated,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(color: AppTheme.statusOk, width: 1),
-            ),
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_rounded, color: AppTheme.statusOk),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Greenhouse "${newGreenhouse.name}" berhasil disimpan ke Firebase!',
-                    style: const TextStyle(color: AppTheme.ink),
+      // 2. Coba kirim/sinkronkan ke Firebase Firestore
+      bool savedRemote = false;
+      try {
+        await _greenhouseService.addGreenhouse(newGreenhouse);
+        savedRemote = true;
+      } catch (remoteErr) {
+        debugPrint('Firestore remote sync error (offline fallback aktif): $remoteErr');
+      }
+
+      if (savedRemote || savedLocal) {
+        if (mounted) {
+          final successMsg = savedRemote
+              ? 'Greenhouse "${newGreenhouse.name}" berhasil disimpan ke Firebase & Lokal!'
+              : 'Greenhouse "${newGreenhouse.name}" tersimpan di Database Lokal (Mode Offline-First)!';
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppTheme.panelElevated,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: const BorderSide(color: AppTheme.statusOk, width: 1),
+              ),
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: AppTheme.statusOk),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      successMsg,
+                      style: const TextStyle(color: AppTheme.ink),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-        Navigator.of(context).pop(true);
+          );
+          Navigator.of(context).pop(true);
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppTheme.panelElevated,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: const BorderSide(color: AppTheme.statusAlert, width: 1),
+              ),
+              content: const Row(
+                children: [
+                  Icon(Icons.error_outline_rounded, color: AppTheme.statusAlert),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Gagal menyimpan greenhouse ke penyimpanan lokal maupun cloud.',
+                      style: TextStyle(color: AppTheme.ink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('Error submit greenhouse: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppTheme.panelElevated,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(color: AppTheme.statusAlert, width: 1),
-            ),
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline_rounded, color: AppTheme.statusAlert),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Gagal menyimpan ke Firebase: $e',
-                    style: const TextStyle(color: AppTheme.ink),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -258,41 +303,45 @@ class _AddGreenhouseSheetState extends State<AddGreenhouseSheet> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.accent.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: AppTheme.accent.withValues(alpha: 0.3),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: AppTheme.accent.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: const Text(
+                              'OFFLINE-FIRST & FIRESTORE',
+                              style: TextStyle(
+                                color: AppTheme.accent,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ),
-                          child: const Text(
-                            'FIREBASE FIRESTORE',
-                            style: TextStyle(
-                              color: AppTheme.accent,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Tambah Greenhouse Baru',
-                      style: AppTheme.headline,
-                    ),
-                  ],
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Tambah Greenhouse Baru',
+                        style: AppTheme.headline,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),

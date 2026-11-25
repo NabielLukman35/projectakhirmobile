@@ -359,6 +359,11 @@ class DatabaseHelper {
     return await db.insert('greenhouse', row);
   }
 
+  Future<List<Map<String, dynamic>>> getAllGreenhouses() async {
+    final db = await instance.database;
+    return await db.query('greenhouse', orderBy: 'id DESC');
+  }
+
   Future<List<Map<String, dynamic>>> getGreenhousesByUser(int userId) async {
     final db = await instance.database;
     return await db.query(
