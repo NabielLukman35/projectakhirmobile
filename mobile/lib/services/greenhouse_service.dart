@@ -416,9 +416,10 @@ class GreenhouseService {
   /// Cache last_seen_ms per device untuk mendeteksi data stale
   static final Map<String, int> _lastSeenCache = {};
 
-  /// Memperbarui konfigurasi tanaman & jenis tanah pada greenhouse
+  /// Memperbarui konfigurasi tanaman & jenis tanah pada greenhouse (Offline-First)
   Future<void> updatePlantConfig({
     required String id,
+    String? name,
     required String plantType,
     required String plantVariety,
     required String soilType,
@@ -426,7 +427,23 @@ class GreenhouseService {
   }) async {
     final effectiveDate = plantingDate ?? DateTime.now();
 
-    // 1. Coba via Firebase SDK
+    // 1. Simpan ke database lokal SQLite terlebih dahulu (Offline-First)
+    try {
+      final intId = int.tryParse(id);
+      await DatabaseHelper.instance.updateGreenhousePlantConfigByNameOrId(
+        id: intId,
+        name: name,
+        jenisTanaman: plantType,
+        varietas: plantVariety,
+        jenisTanah: soilType,
+        tanggalTanam: effectiveDate.toIso8601String(),
+      );
+      debugPrint('[GreenhouseService] Local SQLite updatePlantConfig success: id=$id, name=$name');
+    } catch (e) {
+      debugPrint('[GreenhouseService] Local updatePlantConfig error: $e');
+    }
+
+    // 2. Coba via Firebase SDK
     if (_isFirebaseReady && _firestore != null) {
       try {
         await _firestore!.collection('greenhouses').doc(id).update({
@@ -442,36 +459,53 @@ class GreenhouseService {
       }
     }
 
-    // 2. Fallback via Firestore REST API
-    final url =
-        '$restBaseUrl/$id?updateMask.fieldPaths=plant_type&updateMask.fieldPaths=plant_variety&updateMask.fieldPaths=soil_type&updateMask.fieldPaths=planting_date';
+    // 3. Fallback via Firestore REST API (jangan throw jika cloud menolak / 403)
+    try {
+      final url =
+          '$restBaseUrl/$id?updateMask.fieldPaths=plant_type&updateMask.fieldPaths=plant_variety&updateMask.fieldPaths=soil_type&updateMask.fieldPaths=planting_date';
 
-    final body = json.encode({
-      'fields': {
-        'plant_type': {'stringValue': plantType},
-        'plant_variety': {'stringValue': plantVariety},
-        'soil_type': {'stringValue': soilType},
-        'planting_date': {
-          'timestampValue': effectiveDate.toUtc().toIso8601String(),
-        },
+      final body = json.encode({
+        'fields': {
+          'plant_type': {'stringValue': plantType},
+          'plant_variety': {'stringValue': plantVariety},
+          'soil_type': {'stringValue': soilType},
+          'planting_date': {
+            'timestampValue': effectiveDate.toUtc().toIso8601String(),
+          },
+        }
+      });
+
+      final res = await http.patch(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: body,
+      );
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        debugPrint('[GreenhouseService] updatePlantConfig sukses via REST: $id');
+        return;
       }
-    });
-
-    final res = await http.patch(
-      Uri.parse(url),
-      headers: {'Content-Type': 'application/json'},
-      body: body,
-    );
-
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('Gagal update konfigurasi tanaman via REST: ${res.statusCode}');
+      debugPrint('[GreenhouseService] REST update status: ${res.statusCode} (handled offline-first)');
+    } catch (e) {
+      debugPrint('[GreenhouseService] REST update note: $e');
     }
-    debugPrint('[GreenhouseService] updatePlantConfig sukses via REST: $id');
   }
 
   /// Mereset konfigurasi tanaman pada greenhouse (kembali ke state belum dikonfigurasi)
-  Future<void> resetPlantConfig(String id) async {
-    // 1. Coba via Firebase SDK
+  Future<void> resetPlantConfig(String id, {String? name}) async {
+    // 1. Reset di database lokal SQLite terlebih dahulu (Offline-First)
+    try {
+      final intId = int.tryParse(id);
+      await DatabaseHelper.instance.resetGreenhousePlantConfigByNameOrId(
+        id: intId,
+        name: name,
+      );
+      debugPrint('[GreenhouseService] Local SQLite resetPlantConfig success: id=$id, name=$name');
+    } catch (e) {
+      debugPrint('[GreenhouseService] Local resetPlantConfig error: $e');
+    }
+
+    // 2. Coba via Firebase SDK
     if (_isFirebaseReady && _firestore != null) {
       try {
         await _firestore!.collection('greenhouses').doc(id).update({
@@ -487,28 +521,33 @@ class GreenhouseService {
       }
     }
 
-    // 2. Fallback via REST: Kosongkan string
-    final url =
-        '$restBaseUrl/$id?updateMask.fieldPaths=plant_type&updateMask.fieldPaths=plant_variety&updateMask.fieldPaths=soil_type&updateMask.fieldPaths=planting_date';
+    // 3. Fallback via REST: Kosongkan string (jangan throw jika 403 atau offline)
+    try {
+      final url =
+          '$restBaseUrl/$id?updateMask.fieldPaths=plant_type&updateMask.fieldPaths=plant_variety&updateMask.fieldPaths=soil_type&updateMask.fieldPaths=planting_date';
 
-    final body = json.encode({
-      'fields': {
-        'plant_type': {'stringValue': ''},
-        'plant_variety': {'stringValue': ''},
-        'soil_type': {'stringValue': ''},
+      final body = json.encode({
+        'fields': {
+          'plant_type': {'stringValue': ''},
+          'plant_variety': {'stringValue': ''},
+          'soil_type': {'stringValue': ''},
+        }
+      });
+
+      final res = await http.patch(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: body,
+      );
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        debugPrint('[GreenhouseService] resetPlantConfig sukses via REST: $id');
+        return;
       }
-    });
-
-    final res = await http.patch(
-      Uri.parse(url),
-      headers: {'Content-Type': 'application/json'},
-      body: body,
-    );
-
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('Gagal reset konfigurasi tanaman via REST: ${res.statusCode}');
+      debugPrint('[GreenhouseService] REST reset status: ${res.statusCode} (handled offline-first)');
+    } catch (e) {
+      debugPrint('[GreenhouseService] REST reset note: $e');
     }
-    debugPrint('[GreenhouseService] resetPlantConfig sukses via REST: $id');
   }
 
   /// Menghapus dokumen greenhouse berdasarkan ID dan/atau Nama (Offline-First)

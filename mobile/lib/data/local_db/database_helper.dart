@@ -421,6 +421,36 @@ class DatabaseHelper {
     );
   }
 
+  Future<int> updateGreenhousePlantConfigByNameOrId({
+    int? id,
+    String? name,
+    required String jenisTanaman,
+    required String varietas,
+    required String jenisTanah,
+    required String tanggalTanam,
+  }) async {
+    final db = await instance.database;
+    final values = {
+      'jenis_tanaman': jenisTanaman,
+      'varietas': varietas,
+      'jenis_tanah': jenisTanah,
+      'tanggal_tanam': tanggalTanam,
+    };
+    int count = 0;
+    if (id != null) {
+      count = await db.update('greenhouse', values, where: 'id = ?', whereArgs: [id]);
+    }
+    if (count == 0 && name != null && name.trim().isNotEmpty) {
+      count = await db.update(
+        'greenhouse',
+        values,
+        where: 'LOWER(TRIM(nama_greenhouse)) = ?',
+        whereArgs: [name.trim().toLowerCase()],
+      );
+    }
+    return count;
+  }
+
   Future<int> resetGreenhousePlantConfig(int id) async {
     final db = await instance.database;
     return await db.update(
@@ -434,6 +464,32 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  Future<int> resetGreenhousePlantConfigByNameOrId({
+    int? id,
+    String? name,
+  }) async {
+    final db = await instance.database;
+    final values = {
+      'jenis_tanaman': null,
+      'varietas': null,
+      'jenis_tanah': null,
+      'tanggal_tanam': null,
+    };
+    int count = 0;
+    if (id != null) {
+      count = await db.update('greenhouse', values, where: 'id = ?', whereArgs: [id]);
+    }
+    if (count == 0 && name != null && name.trim().isNotEmpty) {
+      count = await db.update(
+        'greenhouse',
+        values,
+        where: 'LOWER(TRIM(nama_greenhouse)) = ?',
+        whereArgs: [name.trim().toLowerCase()],
+      );
+    }
+    return count;
   }
 
   // ===========================================================================

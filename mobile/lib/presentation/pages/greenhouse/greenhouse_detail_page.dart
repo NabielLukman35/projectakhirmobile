@@ -1071,7 +1071,8 @@ class _GreenhouseDetailPageState extends State<GreenhouseDetailPage> {
       return;
     }
 
-    if (_currentGreenhouse.id == null) {
+    final ghId = _currentGreenhouse.id ?? '';
+    if (ghId.isEmpty && _currentGreenhouse.name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('ID Greenhouse tidak valid.'),
@@ -1085,7 +1086,8 @@ class _GreenhouseDetailPageState extends State<GreenhouseDetailPage> {
 
     try {
       await _greenhouseService.updatePlantConfig(
-        id: _currentGreenhouse.id!,
+        id: ghId,
+        name: _currentGreenhouse.name,
         plantType: plantType,
         plantVariety: variety,
         soilType: soilType,
@@ -1177,10 +1179,13 @@ class _GreenhouseDetailPageState extends State<GreenhouseDetailPage> {
       ),
     );
 
-    if (confirmed == true && _currentGreenhouse.id != null) {
+    if (confirmed == true && (_currentGreenhouse.id != null || _currentGreenhouse.name.isNotEmpty)) {
       setState(() => _isLoading = true);
       try {
-        await _greenhouseService.resetPlantConfig(_currentGreenhouse.id!);
+        await _greenhouseService.resetPlantConfig(
+          _currentGreenhouse.id ?? '',
+          name: _currentGreenhouse.name,
+        );
         if (mounted) {
           setState(() {
             _currentGreenhouse = _currentGreenhouse.copyWith(clearPlantConfig: true);
