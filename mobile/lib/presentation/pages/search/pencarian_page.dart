@@ -4,6 +4,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/local_db/database_helper.dart';
 import '../../providers/auth_providers.dart';
 import '../../widgets/custom_sub_app_bar.dart';
+import '../../widgets/smart_tani_logo.dart';
 import '../iot/iot_monitoring_page.dart';
 
 class PencarianPage extends StatefulWidget {
@@ -177,6 +178,7 @@ class _PencarianPageState extends State<PencarianPage> {
               const CustomSubAppBar(
                 title: 'Pencarian & Filter',
                 subtitle: 'Greenhouse, Varietas Melon, & Status Perawatan',
+                trailing: SmartTaniLogo(size: 32),
               ),
 
               // Search Box
@@ -415,8 +417,11 @@ class _PencarianPageState extends State<PencarianPage> {
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                 decoration: BoxDecoration(
@@ -440,9 +445,13 @@ class _PencarianPageState extends State<PencarianPage> {
             children: [
               const Icon(Icons.location_on_rounded, color: AppTheme.neonLime, size: 14),
               const SizedBox(width: 4),
-              Text(
-                'Kecamatan ${item['kecamatan']} ΓÇó Luas ${item['luas']} m┬▓',
-                style: const TextStyle(color: AppTheme.textGrey, fontSize: 11.5),
+              Expanded(
+                child: Text(
+                  'Kecamatan ${item['kecamatan']} • Luas ${item['luas']} m²',
+                  style: const TextStyle(color: AppTheme.textGrey, fontSize: 11.5),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
               ),
             ],
           ),
@@ -456,8 +465,20 @@ class _PencarianPageState extends State<PencarianPage> {
             ),
             child: Row(
               children: [
-                const Text('≡ƒìê', style: TextStyle(fontSize: 20)),
-                const SizedBox(width: 8),
+                Container(
+                  width: 36,
+                  height: 36,
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardSurface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppTheme.neonLime.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: const SmartTaniLogo(size: 24),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -469,11 +490,15 @@ class _PencarianPageState extends State<PencarianPage> {
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                         ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                       const SizedBox(height: 2),
                       Text(
                         item['jadwal_info'] ?? '',
                         style: const TextStyle(color: AppTheme.textGrey, fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
                       ),
                     ],
                   ),
