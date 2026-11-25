@@ -1,0 +1,9 @@
+{
+  "dart.flutterSdkPath": "C:\\flutter",
+  "C_Cpp.errorSquiggles": "disabled",
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/**",
+    "${workspaceFolder}/mobile/windows/**",
+    "${workspaceFolder}/iot/**"
+  ]
+}
