@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/local_db/database_helper.dart';
+import '../../../services/greenhouse_service.dart';
+import '../../../views/add_greenhouse_sheet.dart';
 import '../../providers/auth_providers.dart';
 import '../../widgets/custom_sub_app_bar.dart';
 import '../../widgets/smart_tani_logo.dart';
@@ -25,13 +27,17 @@ class _PencarianPageState extends State<PencarianPage> {
   List<Map<String, dynamic>> _dataList = [];
   bool _isLoading = true;
 
-  final List<String> _varietasOptions = [
-    'Semua',
-    'Melon Inthanon',
-    'Golden Aroma',
-    'Rock Melon',
-    'Sky Rocket',
-  ];
+  List<String> get _varietasOptions {
+    final set = <String>{'Semua'};
+    for (final item in _dataList) {
+      final v = (item['varietas'] ?? '').toString().trim();
+      if (v.isNotEmpty) set.add(v);
+    }
+    if (set.length == 1) {
+      set.addAll(['Melon Inthanon', 'Golden Emerald', 'Rock Melon', 'Sky Rocket']);
+    }
+    return set.toList();
+  }
 
   final List<String> _statusOptions = [
     'Semua',
@@ -55,87 +61,143 @@ class _PencarianPageState extends State<PencarianPage> {
   }
 
   Future<void> _loadData() async {
-    final auth = context.read<AuthProvider>();
-    final userId = auth.currentUser?.id ?? 1;
+    setState(() => _isLoading = true);
+    try {
+      final greenhouseService = GreenhouseService();
+      final ghList = await greenhouseService.fetchGreenhouses();
 
-    // Ambil data greenhouse dan jadwal
-    final greenhouses = await DatabaseHelper.instance.getGreenhousesByUser(userId);
+      final localRows = await DatabaseHelper.instance.getAllGreenhouses();
+      final localMapByName = {
+        for (final r in localRows)
+          (r['nama_greenhouse'] ?? '').toString().toLowerCase().trim(): r
+      };
 
-    // Siapkan dataset lengkap gabungan
-    List<Map<String, dynamic>> combined = [];
+      List<Map<String, dynamic>> combined = [];
 
-    if (greenhouses.isNotEmpty) {
-      for (final gh in greenhouses) {
+      for (final gh in ghList) {
+        final local = localMapByName[gh.name.toLowerCase().trim()];
+        final alamat = local?['alamat']?.toString() ?? 'Sleman, D.I. Yogyakarta';
+        final kec = alamat
+            .split(',')
+            .first
+            .replaceAll(RegExp(r'^(Kecamatan|Kec\.)\s*', caseSensitive: false), '')
+            .trim();
+        final variety = (gh.plantVariety != null && gh.plantVariety!.trim().isNotEmpty)
+            ? gh.plantVariety!.trim()
+            : (local?['varietas']?.toString() ?? 'Melon Inthanon RZ');
+
         combined.add({
-          'greenhouse_id': gh['id'],
-          'nama_greenhouse': gh['nama_greenhouse'] ?? 'Greenhouse #${gh['id']}',
-          'kecamatan': gh['alamat']?.toString().split(',').first ?? 'Sleman',
-          'alamat_lengkap': gh['alamat'] ?? 'Sleman, D.I. Yogyakarta',
-          'luas': gh['luas'] ?? 150,
-          'varietas': 'Melon Inthanon RZ',
+          'greenhouse_id': gh.id,
+          'nama_greenhouse': gh.name,
+          'kecamatan': kec.isNotEmpty ? kec : 'Sleman',
+          'alamat_lengkap': alamat,
+          'luas': gh.area.toInt(),
+          'varietas': variety,
           'status_perawatan': 'Terjadwal',
           'tingkat_hama': 'Aman',
           'jadwal_info': 'Pemberian nutrisi AB Mix jam 08:00 WIB',
         });
       }
+
+      if (mounted) {
+        setState(() {
+          _dataList = combined;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[PencarianPage] Error load data: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
 
-    // Tambahkan dataset varietas & riset melon komprehensif
-    final defaultItems = [
-      {
-        'greenhouse_id': 1,
-        'nama_greenhouse': 'Greenhouse Inthanon Prime',
-        'kecamatan': 'Ngaglik',
-        'alamat_lengkap': 'Jl. Kaliurang KM 12, Ngaglik, Sleman',
-        'luas': 250,
-        'varietas': 'Melon Inthanon',
-        'status_perawatan': 'Terjadwal',
-        'tingkat_hama': 'Aman',
-        'jadwal_info': 'Pengecekan EC & pH nutrisi drip irrigation',
-      },
-      {
-        'greenhouse_id': 2,
-        'nama_greenhouse': 'Greenhouse Golden Aroma YK',
-        'kecamatan': 'Depok',
-        'alamat_lengkap': 'Maguwoharjo, Depok, Sleman',
-        'luas': 180,
-        'varietas': 'Golden Aroma',
-        'status_perawatan': 'Terlambat',
-        'tingkat_hama': 'Sedang',
-        'jadwal_info': 'Penyemprotan biopestisida pencegahan kutu kebul',
-      },
-      {
-        'greenhouse_id': 3,
-        'nama_greenhouse': 'Greenhouse Rock Melon Lestari',
-        'kecamatan': 'Pakem',
-        'alamat_lengkap': 'Jl. Boyong, Pakem, Sleman',
-        'luas': 300,
-        'varietas': 'Rock Melon',
-        'status_perawatan': 'Selesai',
-        'tingkat_hama': 'Rendah',
-        'jadwal_info': 'Polinasi bunga betina & seleksi 1 buah per pohon',
-      },
-      {
-        'greenhouse_id': 4,
-        'nama_greenhouse': 'Smart Greenhouse Sky Rocket',
-        'kecamatan': 'Mlati',
-        'alamat_lengkap': 'Sendangadi, Mlati, Sleman',
-        'luas': 200,
-        'varietas': 'Sky Rocket',
-        'status_perawatan': 'Terjadwal',
-        'tingkat_hama': 'Kritis',
-        'jadwal_info': 'Penanganan isolasi bercak daun antraknosa',
-      },
-    ];
-
-    combined.addAll(defaultItems);
-
-    if (mounted) {
-      setState(() {
-        _dataList = combined;
-        _isLoading = false;
-      });
-    }
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppTheme.cardSurface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppTheme.emeraldGreen.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: AppTheme.neonLime.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppTheme.neonLime.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.roofing_rounded,
+                  size: 36,
+                  color: AppTheme.neonLime,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Belum Ada Unit Greenhouse',
+                style: TextStyle(
+                  color: AppTheme.creamWhite,
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Daftar pencarian dan filter saat ini kosong karena Anda belum menambahkan unit greenhouse. Daftarkan unit greenhouse pertama Anda untuk mulai mengelola varietas tanaman dan pemantauannya.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppTheme.textGrey.withValues(alpha: 0.9),
+                  fontSize: 12,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final result = await AddGreenhouseSheet.show(context);
+                    if (result == true) {
+                      _loadData();
+                    }
+                  },
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text(
+                    'Tambah Unit Greenhouse',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.neonLime,
+                    foregroundColor: AppTheme.darkForest,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -175,10 +237,22 @@ class _PencarianPageState extends State<PencarianPage> {
         child: SafeArea(
           child: Column(
             children: [
-              const CustomSubAppBar(
+              CustomSubAppBar(
                 title: 'Pencarian & Filter',
                 subtitle: 'Greenhouse, Varietas Melon, & Status Perawatan',
-                trailing: SmartTaniLogo(size: 32),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.refresh_rounded, color: AppTheme.neonLime, size: 20),
+                      tooltip: 'Segarkan data',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _loadData,
+                    ),
+                    const SizedBox(width: 4),
+                    const SmartTaniLogo(size: 32),
+                  ],
+                ),
               ),
 
               // Search Box
@@ -298,40 +372,42 @@ class _PencarianPageState extends State<PencarianPage> {
                     ? const Center(
                         child: CircularProgressIndicator(color: AppTheme.neonLime),
                       )
-                    : filtered.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.search_off_rounded,
-                                    size: 48, color: AppTheme.textGrey),
-                                const SizedBox(height: 12),
-                                const Text(
-                                  'Tidak ada data yang cocok dengan kriteria.',
-                                  style: TextStyle(
-                                      color: AppTheme.textGrey, fontSize: 13),
+                    : _dataList.isEmpty
+                        ? _buildEmptyState()
+                        : filtered.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.search_off_rounded,
+                                        size: 48, color: AppTheme.textGrey),
+                                    const SizedBox(height: 12),
+                                    const Text(
+                                      'Tidak ada data yang cocok dengan kriteria.',
+                                      style: TextStyle(
+                                          color: AppTheme.textGrey, fontSize: 13),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Coba cari dengan nama kecamatan atau jenis varietas lain.',
+                                      style: TextStyle(
+                                          color: AppTheme.textGrey.withValues(alpha: 0.6),
+                                          fontSize: 11),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Coba cari dengan nama kecamatan atau jenis varietas lain.',
-                                  style: TextStyle(
-                                      color: AppTheme.textGrey.withValues(alpha: 0.6),
-                                      fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          )
-                        : ListView.separated(
-                            physics: const BouncingScrollPhysics(),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 8),
-                            itemCount: filtered.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 12),
-                            itemBuilder: (ctx, idx) {
-                              final item = filtered[idx];
-                              return _buildCardItem(item);
-                            },
-                          ),
+                              )
+                            : ListView.separated(
+                                physics: const BouncingScrollPhysics(),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 20, vertical: 8),
+                                itemCount: filtered.length,
+                                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                                itemBuilder: (ctx, idx) {
+                                  final item = filtered[idx];
+                                  return _buildCardItem(item);
+                                },
+                              ),
               ),
             ],
           ),
@@ -346,21 +422,23 @@ class _PencarianPageState extends State<PencarianPage> {
     required String selected,
     required ValueChanged<String?> onChanged,
   }) {
+    final effectiveValue = items.contains(selected) ? selected : items.first;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: selected != 'Semua'
+          color: effectiveValue != 'Semua'
               ? AppTheme.neonLime
               : AppTheme.emeraldGreen.withValues(alpha: 0.35),
-          width: selected != 'Semua' ? 1.4 : 1,
+          width: effectiveValue != 'Semua' ? 1.4 : 1,
         ),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: selected,
+          value: effectiveValue,
           isDense: true,
           dropdownColor: AppTheme.cardSurface,
           icon: const Icon(Icons.arrow_drop_down_rounded,
@@ -371,7 +449,7 @@ class _PencarianPageState extends State<PencarianPage> {
             fontWeight: FontWeight.w700,
           ),
           onChanged: onChanged,
-          items: items.map((val) {
+          items: items.map<DropdownMenuItem<String>>((val) {
             return DropdownMenuItem<String>(
               value: val,
               child: Text(val),
