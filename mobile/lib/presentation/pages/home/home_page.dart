@@ -302,7 +302,7 @@ class _HomePageState extends State<HomePage> {
                               ),
                               const SizedBox(width: 6),
                               const Text(
-                                '• Cloud Firestore',
+                                '• Database Lokal',
                                 style: TextStyle(
                                   color: AppTheme.inkSecondary,
                                   fontSize: 11,
@@ -453,7 +453,7 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 3),
         const Text(
-          'Daftar unit yang tersimpan di Firebase. Ketuk unit untuk menyetting tanaman, varietas, dan jenis tanah.',
+          'Daftar unit yang tersimpan di database lokal. Ketuk unit untuk menyetting tanaman, varietas, dan jenis tanah.',
           style: AppTheme.bodyMuted,
         ),
         const SizedBox(height: 12),

@@ -359,7 +359,7 @@ class _GreenhouseDetailPageState extends State<GreenhouseDetailPage> {
           ],
         ),
         content: Text(
-          'Perangkat "$deviceId" tidak ditemukan atau belum aktif mengirim data di Firebase Realtime Database.\n\nPastikan modul NodeMCU ESP8266 Anda sudah dinyalakan, terhubung ke internet/WiFi, dan telah mengirim data sensor.',
+          'Perangkat "$deviceId" tidak ditemukan atau belum aktif mengirim data di Server IoT.\n\nPastikan modul NodeMCU ESP8266 Anda sudah dinyalakan, terhubung ke internet/WiFi, dan telah mengirim data sensor.',
           style: const TextStyle(color: AppTheme.inkSecondary, fontSize: 13, height: 1.4),
         ),
         actions: [
@@ -726,7 +726,7 @@ class _GreenhouseDetailPageState extends State<GreenhouseDetailPage> {
                             ),
                             SizedBox(width: 10),
                             Text(
-                              'Memeriksa sensor di Firebase RTDB...',
+                              'Memeriksa sensor di Server IoT...',
                               style: TextStyle(color: AppTheme.inkSecondary, fontSize: 12),
                             ),
                           ],
@@ -769,7 +769,7 @@ class _GreenhouseDetailPageState extends State<GreenhouseDetailPage> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Perangkat "$currentInput" tidak ditemukan di Firebase Realtime Database. Pastikan modul IoT fisik menyala dan mengirim data.',
+                                'Perangkat "$currentInput" tidak ditemukan di Server IoT. Pastikan modul IoT fisik menyala dan mengirim data.',
                                 style: const TextStyle(color: AppTheme.statusAlert, fontSize: 12, height: 1.3),
                               ),
                             ),
@@ -1132,7 +1132,7 @@ class _GreenhouseDetailPageState extends State<GreenhouseDetailPage> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Gagal menyimpan ke Firebase: $e'),
+            content: Text('Gagal menyimpan perubahan: $e'),
             backgroundColor: AppTheme.statusAlert,
           ),
         );

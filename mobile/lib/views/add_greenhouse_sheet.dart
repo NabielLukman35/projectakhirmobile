@@ -204,9 +204,8 @@ class _AddGreenhouseSheetState extends State<AddGreenhouseSheet> {
 
       if (savedRemote || savedLocal) {
         if (mounted) {
-          final successMsg = savedRemote
-              ? 'Greenhouse "${newGreenhouse.name}" berhasil disimpan ke Firebase & Lokal!'
-              : 'Greenhouse "${newGreenhouse.name}" tersimpan di Database Lokal (Mode Offline-First)!';
+          final successMsg =
+              'Greenhouse "${newGreenhouse.name}" berhasil disimpan ke Database!';
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -322,7 +321,7 @@ class _AddGreenhouseSheetState extends State<AddGreenhouseSheet> {
                               ),
                             ),
                             child: const Text(
-                              'OFFLINE-FIRST & FIRESTORE',
+                              'DATABASE LOKAL (OFFLINE-FIRST)',
                               style: TextStyle(
                                 color: AppTheme.accent,
                                 fontSize: 10,
@@ -844,7 +843,7 @@ class _AddGreenhouseSheetState extends State<AddGreenhouseSheet> {
                                   ),
                                   SizedBox(width: 12),
                                   Text(
-                                    'Menyimpan ke Firebase...',
+                                    'Menyimpan Greenhouse...',
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold,
@@ -856,10 +855,10 @@ class _AddGreenhouseSheetState extends State<AddGreenhouseSheet> {
                             : const Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.cloud_upload_rounded, size: 20),
+                                  Icon(Icons.save_rounded, size: 20),
                                   SizedBox(width: 8),
                                   Text(
-                                    'Simpan ke Firebase',
+                                    'Simpan Greenhouse',
                                     style: TextStyle(
                                       fontSize: 14.5,
                                       fontWeight: FontWeight.bold,
